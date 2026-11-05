@@ -1,6 +1,6 @@
 # MoviePilot 自定义插件库
 
-本项目为适用于 MoviePilot / MoviePilot-Neo 的第三方独立插件仓库。由 Imagine-Breaker 维护。
+本项目为适用于 MoviePilot / MoviePilot-Neo 的第三方独立插件仓库。由 Antigravity 自动化运维与深度优化。
 
 ---
 

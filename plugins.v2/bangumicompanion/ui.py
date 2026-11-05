@@ -170,10 +170,13 @@ class BangumiUI:
                                     ]},
                                     # TMDb 识别信息卡片条
                                     {"component": "div", "props": {
-                                        "class": "text-body-2 font-weight-medium px-2 py-1 rounded bg-surface-variant d-flex align-center ga-1 text-truncate",
+                                        "class": "text-body-2 font-weight-medium px-2 py-1 rounded bg-surface-variant d-flex align-center justify-space-between ga-1",
                                     }, "content": [
-                                        {"component": "span", "props": {"class": "text-primary font-weight-bold"}, "text": "🎬 TMDb:"},
-                                        {"component": "span", "props": {"class": "text-truncate"}, "text": f"{tmdb_title} ({year}) 第{season}季"},
+                                        {"component": "div", "props": {"class": "d-flex align-center ga-1 text-truncate"}, "content": [
+                                            {"component": "span", "props": {"class": "text-primary font-weight-bold"}, "text": "🎬 TMDb:"},
+                                            {"component": "span", "props": {"class": "text-truncate"}, "text": f"{tmdb_title} ({year})"},
+                                        ]},
+                                        {"component": "VChip", "props": {"color": "primary", "size": "x-small", "variant": "flat", "class": "font-weight-bold flex-shrink-0"}, "text": f"第 {season} 季"},
                                     ]},
                                 ]},
                                 # 底部按钮条
@@ -188,7 +191,7 @@ class BangumiUI:
                                             "class": "flex-grow-1",
                                         },
                                         "text": "选定订阅",
-                                        "events": {"click": {"api": "plugin/BangumiCompanion/subscribe_candidate", "method": "get", "params": {"candidate_id": cand_id}}},
+                                        "events": {"click": {"api": "plugin/BangumiCompanion/subscribe_candidate", "method": "get", "params": {"candidate_id": cand_id, "season": season}}},
                                     },
                                     {
                                         "component": "VBtn",

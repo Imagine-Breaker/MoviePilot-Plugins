@@ -34,7 +34,7 @@ class BangumiCompanion(_PluginBase):
     plugin_desc = "Bangumi 官方直连：个人想看/在看同步、订阅候选审核、MP订阅反向标在看"
     plugin_icon = "https://raw.githubusercontent.com/Imagine-Breaker/MoviePilot-Plugins/main/icons/miku.jpg"
     plugin_version = "1.0.0"
-    plugin_author = "Imagine-Breaker"
+    plugin_author = "Antigravity"
     author_url = "https://github.com/Imagine-Breaker/MoviePilot-Plugins"
     plugin_config_prefix = "bangumicompanion_"
     plugin_order = 15
@@ -148,13 +148,15 @@ class BangumiCompanion(_PluginBase):
             {"path": "/clear_candidates", "endpoint": self.api_clear_candidates, "methods": ["GET", "POST"], "auth": "bear", "summary": "清空候选"},
         ]
 
-    def api_subscribe_candidate(self, candidate_id: Optional[str] = None) -> dict:
+    def api_subscribe_candidate(self, candidate_id: Optional[str] = None, season: Optional[int] = None) -> dict:
         if not candidate_id:
             return {"success": False, "message": "缺少 candidate_id 参数", "data": None}
         candidates = self.get_data("candidates") or []
         target = next((c for c in candidates if c.get("candidate_id") == candidate_id), None)
         if not target:
             return {"success": False, "message": "未找到候选条目", "data": None}
+        if season and int(season) > 0:
+            target["season"] = int(season)
         ok, msg = self._execute_subscribe(target)
         if ok:
             self.save_data("candidates", [c for c in candidates if c.get("candidate_id") != candidate_id])
@@ -297,6 +299,7 @@ class BangumiCompanion(_PluginBase):
 
                 bgm_title = sub.get("name_cn") or sub.get("name") or mediainfo.title
                 poster = mediainfo.get_poster_image() or (sub.get("images") or {}).get("common") or ""
+                season = BangumiMatcher.infer_season(self.chain, sub, mediainfo, meta)
                 cand_data = {
                     "candidate_id": f"cand_{sid}",
                     "subject_id": sid,
@@ -308,7 +311,7 @@ class BangumiCompanion(_PluginBase):
                     "tmdb_id": mediainfo.tmdb_id,
                     "tmdb_title": mediainfo.title,
                     "year": mediainfo.year,
-                    "season": meta.begin_season or 1,
+                    "season": season,
                     "mtype": mediainfo.type.value if hasattr(mediainfo.type, "value") else str(mediainfo.type or ""),
                     "add_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 }

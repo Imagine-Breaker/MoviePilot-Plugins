@@ -87,6 +87,79 @@ class BangumiMatcher:
         return None, None
 
     @staticmethod
+    def infer_season(chain, subject: Dict[str, Any], mediainfo: Optional[MediaInfo], meta: Optional[MetaInfo] = None) -> int:
+        """
+        基于 Bangumi 条目元数据与 TMDb 各季首播日期精准推导季度 (Season Number)。
+        彻底解决“完结篇/最终季/分期”被误判为第 1 季的结构性冲突。
+        """
+        if not mediainfo or mediainfo.type != MediaType.TV:
+            return 1
+
+        bgm_date = str(subject.get("date") or "").strip()
+        bgm_name_cn = str(subject.get("name_cn") or "")
+        bgm_name = str(subject.get("name") or "")
+        combined_title = f"{bgm_name_cn} {bgm_name}".strip()
+
+        # 1. 尝试从 TMDb 获取该剧集的所有 Season 元数据
+        tmdb_info = getattr(mediainfo, "tmdb_info", None)
+        if not tmdb_info and hasattr(chain, "tmdb_info") and mediainfo.tmdb_id:
+            try:
+                tmdb_info = chain.tmdb_info(tmdbid=mediainfo.tmdb_id, mtype=MediaType.TV)
+            except Exception:
+                tmdb_info = None
+
+        seasons = (tmdb_info.get("seasons") if isinstance(tmdb_info, dict) else None) or []
+        valid_seasons = [s for s in seasons if isinstance(s, dict) and (s.get("season_number") or 0) > 0]
+
+        # 2. 精准首播日期对齐：比对 Bangumi 首播日期与 TMDb 各季度的 air_date
+        if bgm_date and len(bgm_date) >= 7 and valid_seasons:
+            bgm_ym = bgm_date[:7]
+            bgm_year = bgm_date[:4]
+            # 2.1 年月完全一致 (如 2026-01 == 2026-01)
+            for s in valid_seasons:
+                s_air = str(s.get("air_date") or "").strip()
+                if s_air.startswith(bgm_ym):
+                    logger.info(f"季度精准年月对齐: [{combined_title}] ({bgm_date}) -> Season {s['season_number']}")
+                    return int(s["season_number"])
+            # 2.2 年份完全一致
+            year_matched = [s for s in valid_seasons if str(s.get("air_date") or "").startswith(bgm_year)]
+            if len(year_matched) == 1:
+                logger.info(f"季度年份唯一对齐: [{combined_title}] ({bgm_date}) -> Season {year_matched[0]['season_number']}")
+                return int(year_matched[0]["season_number"])
+
+        # 3. 动漫语义规则推导
+        # 3.1 最终季 / 最终章 / 完结篇 -> 自动对齐 TMDb 最新最大季
+        if any(w in combined_title for w in ["最终季", "最终章", "完结篇", "完結編", "Final Season", "The Final"]):
+            if valid_seasons:
+                max_s = max(s.get("season_number", 1) for s in valid_seasons)
+                logger.info(f"动漫语义推导 [最终季/完结篇]: [{combined_title}] -> 最大 Season {max_s}")
+                return int(max_s)
+
+        # 3.2 标题含有明确季数：第X季 / 第X期 / Season X / Part X
+        import re
+        patterns = [
+            r"第\s*([0-9一二三四五六七八九十]+)\s*[季期]",
+            r"(?:Season|S)\s*(\d+)",
+            r"(\d+)(?:st|nd|rd|th)\s+Season",
+            r"Part\s*(\d+)",
+        ]
+        cn_num = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+        for pat in patterns:
+            match = re.search(pat, combined_title, re.IGNORECASE)
+            if match:
+                val = match.group(1)
+                num = cn_num.get(val) if val in cn_num else (int(val) if val.isdigit() else None)
+                if num and num > 0:
+                    logger.info(f"动漫语义推导 [季数提取]: [{combined_title}] -> Season {num}")
+                    return int(num)
+
+        # 4. MetaInfo 提取兜底
+        if meta and meta.begin_season:
+            return int(meta.begin_season)
+
+        return 1
+
+    @staticmethod
     def match_mediainfo_to_subject(client, mediainfo: Any, extra_info: Optional[Dict[str, Any]] = None) -> Optional[int]:
         """
         根据 MoviePilot 的订阅元数据反向匹配 Bangumi Subject ID。
