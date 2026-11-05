@@ -1,6 +1,6 @@
 # MoviePilot 自定义插件库
 
-本项目为适用于 MoviePilot / MoviePilot-Neo 的第三方独立插件仓库。
+本项目为适用于 MoviePilot / MoviePilot-Neo 的第三方独立插件仓库。由 Imagine-Breaker 维护。
 
 ---
 
@@ -8,7 +8,7 @@
 
 | 插件名称 | 插件 ID | 当前版本 | 说明 |
 | :--- | :--- | :--- | :--- |
-| **Bangumi追番伴侣** | `BangumiRank` | `1.0.0` | Bangumi 官方直连：想看/在看候选审核、MP 订阅反向同步在看、高精准 TV 动画防误识。 |
+| **Bangumi追番伴侣** | `BangumiCompanion` | `1.0.0` | Bangumi 官方直连：想看/在看候选审核、MP 订阅反向同步在看、高精准 TV 动画防误识。 |
 
 ---
 
