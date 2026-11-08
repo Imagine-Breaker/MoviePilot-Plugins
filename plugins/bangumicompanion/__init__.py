@@ -243,32 +243,6 @@ class BangumiCompanion(_PluginBase):
             logger.error(f"执行订阅异常: {err}")
             return False, str(err)
 
-    def _is_subscribed(self, mediainfo: Any, meta: Any, season: int) -> bool:
-        """已订阅判定：优先直查订阅表，查不到该媒体时才回退 MP 原生 exists。"""
-        state = find_subscription_state(
-            mediainfo,
-            season=season if mediainfo.type == MediaType.TV else None,
-            is_tv=mediainfo.type == MediaType.TV,
-        )
-        if state is not None:
-            return state
-        try:
-            return bool(self.subscribechain.exists(mediainfo=mediainfo, meta=meta))
-        except Exception as err:
-            logger.debug(f"MP 订阅存在性判定失败: {err}")
-            return False
-
-    def _remember_subscribed(self, sid: Any, tmdb_id: Any = None, season: Any = None):
-        if not sid:
-            return
-        data = self.get_data("subscribed") or {}
-        data[f"bgm:{sid}"] = {
-            "tmdb_id": tmdb_id,
-            "season": season,
-            "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        self.save_data("subscribed", data)
-
     @eventmanager.register(EventType.SubscribeAdded)
     def on_subscribe_added(self, event: Event):
         """MP 订阅反向同步：只要在 MP 订阅番剧，自动在 Bangumi 标记为在看"""
