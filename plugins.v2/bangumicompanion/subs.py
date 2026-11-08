@@ -25,7 +25,7 @@ def find_subscription_state(
     """
     try:
         from sqlalchemy import or_, select
-        from app.db import get_db
+        from app.db import SessionFactory
         from app.db.models.subscribe import Subscribe
 
         conditions = []
@@ -38,7 +38,11 @@ def find_subscription_state(
         if not conditions:
             return None
 
-        rows = get_db().execute(select(Subscribe).where(or_(*conditions))).scalars().all()
+        db = SessionFactory()
+        try:
+            rows = db.execute(select(Subscribe).where(or_(*conditions))).scalars().all()
+        finally:
+            db.close()
         if not rows:
             return None
         if not is_tv or not season:
@@ -78,18 +82,21 @@ def remember_subscribed(plugin: Any, sid: Any, tmdb_id: Any = None, season: Any 
 def apply_subscribe_filter(plugin: Any, sub_id: int) -> None:
     """把插件配置的包含/排除规则写入新建订阅。"""
     try:
-        from app.db import get_db
+        from app.db import SessionFactory
         from app.db.models.subscribe import Subscribe
 
-        db = get_db()
-        record = Subscribe.get(db, sub_id)
-        if not record:
-            return
-        if plugin._include:
-            record.include = plugin._include
-        if plugin._exclude:
-            record.exclude = plugin._exclude
-        record.update(db=db, payload=record.to_dict())
+        db = SessionFactory()
+        try:
+            record = Subscribe.get(db, sub_id)
+            if not record:
+                return
+            if plugin._include:
+                record.include = plugin._include
+            if plugin._exclude:
+                record.exclude = plugin._exclude
+            record.update(db=db, payload=record.to_dict())
+        finally:
+            db.close()
     except Exception as err:
         logger.debug(f"设置过滤规则跳过: {err}")
 
