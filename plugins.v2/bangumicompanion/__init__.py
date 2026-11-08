@@ -17,15 +17,18 @@ from app.schemas.types import EventType, MediaType
 try:
     from app.plugins.bangumicompanion.client import BangumiClient
     from app.plugins.bangumicompanion.matcher import BangumiMatcher
+    from app.plugins.bangumicompanion.subs import apply_subscribe_filter, is_subscribed, remember_subscribed
     from app.plugins.bangumicompanion.ui import BangumiUI
 except ImportError:
     try:
         from .client import BangumiClient
         from .matcher import BangumiMatcher
+        from .subs import apply_subscribe_filter, is_subscribed, remember_subscribed
         from .ui import BangumiUI
     except ImportError:
         from client import BangumiClient
         from matcher import BangumiMatcher
+        from subs import apply_subscribe_filter, is_subscribed, remember_subscribed
         from ui import BangumiUI
 
 
@@ -33,7 +36,7 @@ class BangumiCompanion(_PluginBase):
     plugin_name = "Bangumi追番伴侣"
     plugin_desc = "Bangumi 官方直连：个人想看/在看同步、订阅候选审核、MP订阅反向标在看"
     plugin_icon = "https://raw.githubusercontent.com/Imagine-Breaker/MoviePilot-Plugins/main/icons/miku.jpg"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "Antigravity"
     author_url = "https://github.com/Imagine-Breaker/MoviePilot-Plugins"
     plugin_config_prefix = "bangumicompanion_"
@@ -91,6 +94,7 @@ class BangumiCompanion(_PluginBase):
         if self._clear:
             self.save_data("history", [])
             self.save_data("candidates", [])
+            self.save_data("subscribed", {})
             self._clear = False
             self.__update_config()
 
@@ -216,11 +220,8 @@ class BangumiCompanion(_PluginBase):
             if not sub_id:
                 return False, msg or "添加订阅失败"
 
-            self._apply_subscribe_filter(sub_id)
+            # 先记账：即使后续 Bangumi 状态同步失败，也不会在下次运行重复添加
             sid = item.get("subject_id")
-            if self._token and sid:
-                self.client.update_collection_status(sid, status=3)
-
             self._record_history(
                 title=item.get("bgm_title") or item.get("tmdb_title"),
                 category=f"已订阅 ({item.get('source', '手动')})",
@@ -229,10 +230,44 @@ class BangumiCompanion(_PluginBase):
                 unique_id=f"bgm:{sid}",
                 score=item.get("score"),
             )
+            remember_subscribed(self, sid, item.get("tmdb_id"), item.get("season"))
+
+            apply_subscribe_filter(self, sub_id)
+            if self._token and sid:
+                try:
+                    self.client.update_collection_status(sid, status=3)
+                except Exception as err:
+                    logger.warning(f"标记 Bangumi 在看失败 [{sid}]: {err}")
             return True, "成功"
         except Exception as err:
             logger.error(f"执行订阅异常: {err}")
             return False, str(err)
+
+    def _is_subscribed(self, mediainfo: Any, meta: Any, season: int) -> bool:
+        """已订阅判定：优先直查订阅表，查不到该媒体时才回退 MP 原生 exists。"""
+        state = find_subscription_state(
+            mediainfo,
+            season=season if mediainfo.type == MediaType.TV else None,
+            is_tv=mediainfo.type == MediaType.TV,
+        )
+        if state is not None:
+            return state
+        try:
+            return bool(self.subscribechain.exists(mediainfo=mediainfo, meta=meta))
+        except Exception as err:
+            logger.debug(f"MP 订阅存在性判定失败: {err}")
+            return False
+
+    def _remember_subscribed(self, sid: Any, tmdb_id: Any = None, season: Any = None):
+        if not sid:
+            return
+        data = self.get_data("subscribed") or {}
+        data[f"bgm:{sid}"] = {
+            "tmdb_id": tmdb_id,
+            "season": season,
+            "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        self.save_data("subscribed", data)
 
     @eventmanager.register(EventType.SubscribeAdded)
     def on_subscribe_added(self, event: Event):
@@ -275,6 +310,7 @@ class BangumiCompanion(_PluginBase):
 
         history = self.get_data("history") or []
         candidates = self.get_data("candidates") or []
+        subscribed = self.get_data("subscribed") or {}
         handled_uids = {h.get("unique") for h in history}
         cand_sub_ids = {c.get("subject_id") for c in candidates}
 
@@ -282,7 +318,7 @@ class BangumiCompanion(_PluginBase):
             if self._event.is_set():
                 break
             sid = sub.get("id")
-            if not sid or f"bgm:{sid}" in handled_uids or sid in cand_sub_ids:
+            if not sid or f"bgm:{sid}" in handled_uids or f"bgm:{sid}" in subscribed or sid in cand_sub_ids:
                 continue
 
             score = (sub.get("rating") or {}).get("score") if isinstance(sub.get("rating"), dict) else sub.get("score")
@@ -294,12 +330,13 @@ class BangumiCompanion(_PluginBase):
                 if not mediainfo or not mediainfo.tmdb_id:
                     continue
 
-                if self.subscribechain.exists(mediainfo=mediainfo, meta=meta):
+                season = BangumiMatcher.infer_season(self.chain, sub, mediainfo, meta)
+                if is_subscribed(self, mediainfo, meta, season):
+                    remember_subscribed(self, sid, mediainfo.tmdb_id, season)
                     continue
 
                 bgm_title = sub.get("name_cn") or sub.get("name") or mediainfo.title
                 poster = mediainfo.get_poster_image() or (sub.get("images") or {}).get("common") or ""
-                season = BangumiMatcher.infer_season(self.chain, sub, mediainfo, meta)
                 cand_data = {
                     "candidate_id": f"cand_{sid}",
                     "subject_id": sid,
@@ -330,23 +367,10 @@ class BangumiCompanion(_PluginBase):
             self.save_data("candidates", candidates)
         logger.info("Bangumi 收藏同步完成")
 
-    def _apply_subscribe_filter(self, sub_id: int):
-        try:
-            from app.db import get_db
-            from app.db.models.subscribe import Subscribe
-            db = get_db()
-            sub_record = Subscribe.get(db, sub_id)
-            if sub_record:
-                if self._include:
-                    sub_record.include = self._include
-                if self._exclude:
-                    sub_record.exclude = self._exclude
-                sub_record.update(db=db, payload=sub_record.to_dict())
-        except Exception as e:
-            logger.debug(f"设置过滤规则跳过: {e}")
-
     def _record_history(self, title: str, category: str, link: str = "", poster: str = "", unique_id: str = "", score: Any = None):
         history = self.get_data("history") or []
+        uid = unique_id or f"action_{datetime.datetime.now().timestamp()}"
+        history = [h for h in history if h.get("unique") != uid]
         history.insert(0, {
             "title": title,
             "type": category,
@@ -354,7 +378,7 @@ class BangumiCompanion(_PluginBase):
             "poster": poster or "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg",
             "score": score or "无",
             "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "unique": unique_id or f"action_{datetime.datetime.now().timestamp()}",
+            "unique": uid,
         })
         self.save_data("history", history[:100])
 
