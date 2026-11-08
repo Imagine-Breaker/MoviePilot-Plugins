@@ -2,15 +2,16 @@
   "BangumiCompanion": {
     "name": "Bangumi追番伴侣",
     "description": "Bangumi 官方直连：个人想看/在看同步、订阅候选审核、MP订阅反向标在看",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "v2": true,
     "icon": "https://raw.githubusercontent.com/Imagine-Breaker/MoviePilot-Plugins/main/icons/miku.jpg",
     "author": "Antigravity",
     "author_url": "https://github.com/Imagine-Breaker/MoviePilot-Plugins",
     "level": 1,
     "history": {
+      "v1.0.4": "已订阅判定同时查询订阅表与订阅历史表：MP 完成订阅后会删除 subscribe 行并写入 subscribehistory，旧逻辑因此每次都判定为未订阅并重复 add()，产生“已添加订阅/完成订阅”通知。",
       "v1.0.3": "修正订阅表直查的数据库会话用法（改用 SessionFactory，原 get_db 为生成器导致直查静默失败），确保已订阅条目被真正跳过；同时修复过滤规则写入。",
-      "v1.0.2": "修复已订阅条目每次运行都被重复 add() 的问题：新增持久化订阅账本与订阅表直查，跳过已存在季；订阅历史按条目去重，避免重复通知。",
+      "v1.0.2": "新增持久化订阅账本与订阅表直查，跳过已存在季；订阅历史按条目去重，避免重复通知。",
       "v1.0.1": "优化动漫季度精准对齐：采用 TMDb 各季开播日期比对与完结篇/分期语义推导，解决错订为第 1 季问题；署名脱敏。",
       "v1.0.0": "专注个人追番：支持想看/在看拉取与自适应海报卡片审核选定；MP订阅反向同步在看；支持bangumiid映射直连与TV动画防真人版匹配。"
     }

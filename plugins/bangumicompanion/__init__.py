@@ -36,7 +36,7 @@ class BangumiCompanion(_PluginBase):
     plugin_name = "Bangumi追番伴侣"
     plugin_desc = "Bangumi 官方直连：个人想看/在看同步、订阅候选审核、MP订阅反向标在看"
     plugin_icon = "https://raw.githubusercontent.com/Imagine-Breaker/MoviePilot-Plugins/main/icons/miku.jpg"
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     plugin_author = "Antigravity"
     author_url = "https://github.com/Imagine-Breaker/MoviePilot-Plugins"
     plugin_config_prefix = "bangumicompanion_"
